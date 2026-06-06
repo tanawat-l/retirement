@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Finance & FIRE Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+/* ── reset ── */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:'Segoe UI',system-ui,sans-serif;background:#f4f3ef;color:#1a1917;}
+button{cursor:pointer;font-family:inherit;}
+input,select,textarea{font-family:inherit;}
+
+/* ── desktop layout ── */
+.app-shell{display:flex;height:100vh;overflow:hidden;}
+#sidebar{width:220px;min-width:220px;background:#161614;color:#f0efe8;display:flex;flex-direction:column;height:100vh;overflow-y:auto;flex-shrink:0;}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+#bottom-nav{display:none;}
+
+/* ── sidebar ── */
+#sidebar-header{padding:20px 18px 14px;border-bottom:1px solid #252422;}
+#sidebar-title{font-size:16px;font-weight:700;color:#F7931A;letter-spacing:.02em;}
+#sidebar-sub{font-size:11px;color:#444;margin-top:3px;}
+.nav-section{padding:14px 12px 4px;font-size:10px;color:#3a3a38;letter-spacing:.1em;text-transform:uppercase;font-weight:600;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 18px;font-size:13px;color:#888;cursor:pointer;border-left:2px solid transparent;transition:all .15s;}
+.nav-item:hover{color:#f0efe8;background:#1e1d1b;}
+.nav-item.active{color:#F7931A;border-left-color:#F7931A;background:#1e1d1b;}
+.nav-item .icon{font-size:14px;width:16px;text-align:center;}
+#sidebar-footer{padding:14px 18px;border-top:1px solid #252422;font-size:11px;color:#333;margin-top:auto;}
+
+/* ── topbar ── */
+#topbar{background:#fff;border-bottom:1px solid #e8e6e0;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+#page-title{font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#topbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.month-select{border:1px solid #e0ded8;border-radius:6px;padding:5px 8px;font-size:13px;background:#f4f3ef;outline:none;}
+
+/* ── content ── */
+#content{flex:1;overflow-y:auto;padding:20px 24px;}
+
+/* ── cards ── */
+.card{background:#fff;border:1px solid #e8e6e0;border-radius:10px;padding:16px 18px;margin-bottom:14px;}
+.card-title{font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;font-weight:600;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.stat-card{background:#fff;border:1px solid #e8e6e0;border-radius:10px;padding:14px 16px;}
+.stat-label{font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;}
+.stat-val{font-size:21px;font-weight:700;line-height:1.2;}
+.stat-sub{font-size:12px;color:#999;margin-top:3px;}
+
+/* ── table ── */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:400px;}
+th{text-align:left;padding:8px 10px;background:#f4f3ef;color:#777;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;border-bottom:1px solid #e8e6e0;}
+td{padding:8px 10px;border-bottom:1px solid #f0efe8;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:#faf9f6;}
+
+/* ── forms ── */
+.form-row{display:grid;gap:10px;margin-bottom:10px;}
+.form-row.cols-4{grid-template-columns:repeat(4,1fr);}
+.form-row.cols-3{grid-template-columns:repeat(3,1fr);}
+.form-row.cols-2{grid-template-columns:1fr 1fr;}
+.form-row.cols-5{grid-template-columns:repeat(5,1fr);}
+label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;}
+input[type=text],input[type=number],input[type=date],input[type=month],select,textarea{width:100%;border:1px solid #e0ded8;border-radius:6px;padding:9px 10px;font-size:14px;outline:none;background:#fff;color:#1a1917;}
+input:focus,select:focus,textarea:focus{border-color:#F7931A;box-shadow:0 0 0 2px rgba(247,147,26,.1);}
+textarea{resize:vertical;min-height:70px;}
+
+/* ── buttons ── */
+.btn{padding:9px 16px;border-radius:8px;font-size:14px;font-weight:600;border:none;letter-spacing:.01em;}
+.btn-primary{background:#F7931A;color:#fff;}
+.btn-primary:hover{background:#e07e10;}
+.btn-ghost{background:transparent;border:1px solid #e0ded8;color:#555;}
+.btn-ghost:hover{background:#f4f3ef;}
+.btn-sm{padding:5px 11px;font-size:12px;}
+
+/* ── misc ── */
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;}
+.badge-green{background:#dcfce7;color:#166534;}
+.badge-orange{background:#fff7ed;color:#c2410c;}
+.progress{height:8px;background:#f0efe8;border-radius:99px;overflow:hidden;margin:4px 0;}
+.progress-fill{height:100%;border-radius:99px;transition:width .4s;}
+.section-divider{font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.1em;padding:14px 0 8px;font-weight:600;border-top:1px solid #f0efe8;margin-top:6px;}
+.empty-state{color:#bbb;text-align:center;padding:32px 20px;font-size:14px;}
+.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:5px;background:#f0efe8;color:#666;}
+.del-btn{background:none;border:none;color:#ddd;font-size:13px;padding:2px 6px;}
+.del-btn:hover{color:#ef4444;}
+.two-col-layout{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start;}
+.budget-over{color:#ef4444;font-weight:600;}
+.budget-ok{color:#16a34a;font-weight:600;}
+.highlight-box{background:#fffbf5;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;font-size:13px;color:#92400e;line-height:1.6;margin-bottom:10px;}
+.green-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;font-size:13px;color:#166534;line-height:1.6;margin-bottom:10px;}
+.fire-num{font-size:26px;font-weight:700;color:#F7931A;}
+
+/* ── bottom nav (mobile) ── */
+#bottom-nav{position:fixed;bottom:0;left:0;right:0;height:58px;background:#161614;border-top:1px solid #252422;display:flex;align-items:stretch;z-index:100;}
+.bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:transparent;border:none;color:#555;cursor:pointer;padding:6px 2px;-webkit-tap-highlight-color:transparent;}
+.bnav-item.active{color:#F7931A;}
+.bnav-icon{font-size:18px;line-height:1;}
+.bnav-label{font-size:9px;letter-spacing:.03em;font-family:inherit;}
+
+/* ── more drawer (mobile) ── */
+#more-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;}
+#more-sheet{display:none;position:fixed;bottom:58px;left:0;right:0;background:#fff;border-radius:16px 16px 0 0;padding:16px;z-index:201;box-shadow:0 -4px 24px rgba(0,0,0,.15);}
+#more-sheet.open,#more-overlay.open{display:block;}
+.more-header{font-size:13px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;}
+.more-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.more-btn{padding:14px 6px;background:#f4f3ef;border:none;border-radius:10px;text-align:center;font-size:11px;cursor:pointer;color:#1a1917;font-family:inherit;line-height:1.4;}
+.more-btn-icon{font-size:20px;display:block;margin-bottom:4px;}
+.more-btn:active{background:#e8e6e0;}
+
+/* ══════════════════════════════
+   RESPONSIVE — MOBILE
+══════════════════════════════ */
+@media (max-width:768px){
+  .app-shell{flex-direction:column;height:auto;overflow:auto;height:100dvh;}
+  #sidebar{display:none;}
+  #main{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+  #bottom-nav{display:flex;}
+  #topbar{padding:0 14px;height:48px;}
+  #page-title{font-size:15px;}
+  #topbar-btn-text{display:none;}
+  #content{padding:12px 12px 72px;}
+  .grid-4{grid-template-columns:1fr 1fr;gap:8px;}
+  .grid-3{grid-template-columns:1fr 1fr;gap:8px;}
+  .grid-2{grid-template-columns:1fr;gap:10px;}
+  .two-col-layout{grid-template-columns:1fr;gap:10px;}
+  .form-row.cols-4,.form-row.cols-5{grid-template-columns:1fr 1fr;}
+  .form-row.cols-3{grid-template-columns:1fr 1fr;}
+  .stat-val{font-size:18px;}
+  .stat-card,.card{padding:12px 13px;}
+  table{font-size:12px;min-width:340px;}
+  th,td{padding:7px 8px;}
+  .fire-num{font-size:22px;}
+  .btn{font-size:13px;padding:10px 14px;}
+  input[type=text],input[type=number],input[type=date],input[type=month],select,textarea{font-size:16px;}/* prevent zoom on iOS */
+}
+@media (max-width:400px){
+  .grid-4,.grid-3{grid-template-columns:1fr 1fr;}
+  .more-grid{grid-template-columns:repeat(3,1fr);}
+}
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+<!-- ── SIDEBAR (desktop) ── -->
+<aside id="sidebar">
+  <div id="sidebar-header">
+    <div id="sidebar-title">₿ Finance Dashboard</div>
+    <div id="sidebar-sub">Age 23 · FIRE at 35–40</div>
+  </div>
+  <div class="nav-section">Overview</div>
+  <div class="nav-item active" data-page="dashboard"><span class="icon">◈</span> Dashboard</div>
+  <div class="nav-section">Monthly Tracker</div>
+  <div class="nav-item" data-page="transactions"><span class="icon">↕</span> Transactions</div>
+  <div class="nav-item" data-page="income"><span class="icon">↑</span> Income</div>
+  <div class="nav-item" data-page="budget"><span class="icon">▤</span> Budget Plan</div>
+  <div class="nav-item" data-page="notes"><span class="icon">✎</span> Monthly Notes</div>
+  <div class="nav-section">FIRE Retirement</div>
+  <div class="nav-item" data-page="fire"><span class="icon">◎</span> FIRE Overview</div>
+  <div class="nav-item" data-page="portfolio"><span class="icon">₿</span> Portfolio Log</div>
+  <div class="nav-item" data-page="networth"><span class="icon">◈</span> Net Worth</div>
+  <div class="nav-item" data-page="tax"><span class="icon">%</span> Tax Planner</div>
+  <div class="nav-item" data-page="goals"><span class="icon">✦</span> Goals</div>
+  <div id="sidebar-footer">Saved locally in browser<br>Last: <span id="last-saved">—</span></div>
+</aside>
+
+<!-- ── MAIN ── -->
+<div id="main">
+  <div id="topbar">
+    <div id="page-title">Dashboard</div>
+    <div id="topbar-right">
+      <select class="month-select" id="active-month"></select>
+      <button class="btn btn-primary btn-sm" onclick="exportData()"><span id="topbar-btn-text">Export</span> ↓</button>
+    </div>
+  </div>
+  <div id="content"></div>
+</div>
+
+<!-- ── BOTTOM NAV (mobile) ── -->
+<nav id="bottom-nav">
+  <button class="bnav-item active" data-page="dashboard"><span class="bnav-icon">◈</span><span class="bnav-label">Home</span></button>
+  <button class="bnav-item" data-page="transactions"><span class="bnav-icon">↕</span><span class="bnav-label">Spend</span></button>
+  <button class="bnav-item" data-page="income"><span class="bnav-icon">↑</span><span class="bnav-label">Income</span></button>
+  <button class="bnav-item" data-page="fire"><span class="bnav-icon">₿</span><span class="bnav-label">FIRE</span></button>
+  <button class="bnav-item" onclick="toggleMore()"><span class="bnav-icon">☰</span><span class="bnav-label">More</span></button>
+</nav>
+
+<!-- ── MORE DRAWER (mobile) ── -->
+<div id="more-overlay" onclick="toggleMore()"></div>
+<div id="more-sheet">
+  <div class="more-header">All Pages</div>
+  <div class="more-grid">
+    <button class="more-btn" onclick="navigate('portfolio');toggleMore()"><span class="more-btn-icon">₿</span>Portfolio</button>
+    <button class="more-btn" onclick="navigate('goals');toggleMore()"><span class="more-btn-icon">✦</span>Goals</button>
+    <button class="more-btn" onclick="navigate('budget');toggleMore()"><span class="more-btn-icon">▤</span>Budget</button>
+    <button class="more-btn" onclick="navigate('notes');toggleMore()"><span class="more-btn-icon">✎</span>Notes</button>
+    <button class="more-btn" onclick="navigate('networth');toggleMore()"><span class="more-btn-icon">◈</span>Net Worth</button>
+    <button class="more-btn" onclick="navigate('tax');toggleMore()"><span class="more-btn-icon">%</span>Tax Plan</button>
+    <button class="more-btn" onclick="exportData();toggleMore()"><span class="more-btn-icon">↓</span>Export</button>
+    <button class="more-btn" onclick="importData();toggleMore()"><span class="more-btn-icon">↑</span>Import</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════
+const STORAGE_KEY='finance_v2';
+const DEFAULT_BUDGET=[
+  {id:'b1',category:'Survival',item:'Condo Rent',allocation:7500},
+  {id:'b2',category:'Survival',item:'Food (อาหาร)',allocation:4500},
+  {id:'b3',category:'Survival',item:'Electricity & Water',allocation:1000},
+  {id:'b4',category:'Survival',item:'Household Essentials',allocation:500},
+  {id:'b5',category:'Survival',item:'Transportation',allocation:2000},
+  {id:'b6',category:'Family Shield',item:'Family',allocation:3000},
+  {id:'b7',category:'Business/AI',item:'Business/AI',allocation:0},
+  {id:'b8',category:'Wealth & Security',item:'Emergency Fund',allocation:6000},
+  {id:'b9',category:'Wealth & Security',item:'Personal Spending',allocation:500},
+  {id:'b10',category:'Investing',item:'Bitcoin DCA',allocation:4500},
+];
+const DEFAULT_GOALS=[
+  {id:'g1',name:'Emergency Fund ฿96k',target:96000,cat:'emergency',note:'6 months expenses'},
+  {id:'g2',name:'Portfolio ฿100k',target:100000,cat:'portfolio',note:'First milestone'},
+  {id:'g3',name:'Portfolio ฿500k',target:500000,cat:'portfolio',note:'Building momentum'},
+  {id:'g4',name:'Portfolio ฿1M',target:1000000,cat:'portfolio',note:'Million baht club'},
+  {id:'g5',name:'Bitcoin ฿1M',target:1000000,cat:'bitcoin',note:'BTC milestone'},
+  {id:'g6',name:'Portfolio ฿5M',target:5000000,cat:'portfolio',note:'Base FIRE number'},
+  {id:'g7',name:'Salary ฿40k/mo',target:40000,cat:'income',note:'Income growth'},
+  {id:'g8',name:'Real estate fund ฿500k',target:500000,cat:'realestate',note:'BTC → property'},
+];
+const CAT_MAP={'อาหาร':'Food','เดินทาง, รถ':'Transport','ของใช้จำเป็น':'Household','บ้าน, สาธารณูปโภค':'Home/Utilities','ออมเงิน, ลงทุน':'Invest/Save','ช้อปปิ้ง':'Shopping','ครอบครัว':'Family','ธุรกิจ/AI':'Business','กองทุนฉุกเฉิน':'Emergency','อื่นๆ':'Other','ความบันเทิง':'Entertainment'};
+const ALL_CATS=['อาหาร','เดินทาง, รถ','ของใช้จำเป็น','บ้าน, สาธารณูปโภค','ออมเงิน, ลงทุน','ช้อปปิ้ง','ครอบครัว','ธุรกิจ/AI','กองทุนฉุกเฉิน','ความบันเทิง','อื่นๆ'];
+const BCAT_MAP={'อาหาร':'Food (อาหาร)','บ้าน, สาธารณูปโภค':'Condo Rent','เดินทาง, รถ':'Transportation','ของใช้จำเป็น':'Household Essentials','ครอบครัว':'Family','ออมเงิน, ลงทุน':'Bitcoin DCA'};
+const CAT_COLORS={emergency:'#3b82f6',portfolio:'#F7931A',bitcoin:'#F7931A',income:'#10b981',realestate:'#8b5cf6',custom:'#f43f5e'};
+
+function initDB(){
+  const s=localStorage.getItem(STORAGE_KEY);
+  if(s)try{return JSON.parse(s);}catch{}
+  return{
+    transactions:[
+      {id:'t1',date:'2026-05-01',category:'อาหาร',amount:902.75,note:''},
+      {id:'t2',date:'2026-05-04',category:'อาหาร',amount:50,note:''},
+      {id:'t3',date:'2026-05-05',category:'อาหาร',amount:50,note:''},
+      {id:'t4',date:'2026-05-05',category:'เดินทาง, รถ',amount:900,note:''},
+      {id:'t5',date:'2026-05-06',category:'อาหาร',amount:50,note:''},
+      {id:'t6',date:'2026-05-07',category:'อาหาร',amount:43,note:''},
+      {id:'t7',date:'2026-05-08',category:'อาหาร',amount:110,note:''},
+      {id:'t8',date:'2026-05-09',category:'อาหาร',amount:50,note:''},
+      {id:'t9',date:'2026-05-10',category:'อาหาร',amount:455,note:''},
+      {id:'t10',date:'2026-05-12',category:'อาหาร',amount:60,note:''},
+      {id:'t11',date:'2026-05-13',category:'อาหาร',amount:53,note:''},
+      {id:'t12',date:'2026-05-14',category:'อาหาร',amount:57,note:''},
+      {id:'t13',date:'2026-05-14',category:'ของใช้จำเป็น',amount:672,note:''},
+      {id:'t14',date:'2026-05-15',category:'อาหาร',amount:420.5,note:''},
+      {id:'t15',date:'2026-05-16',category:'ออมเงิน, ลงทุน',amount:6713,note:'Gulf Energy'},
+      {id:'t16',date:'2026-05-17',category:'อาหาร',amount:974,note:''},
+      {id:'t17',date:'2026-05-17',category:'บ้าน, สาธารณูปโภค',amount:7500,note:'Condo Rent'},
+      {id:'t18',date:'2026-05-17',category:'บ้าน, สาธารณูปโภค',amount:51.4,note:'Electricity'},
+      {id:'t19',date:'2026-05-17',category:'เดินทาง, รถ',amount:1240,note:''},
+      {id:'t20',date:'2026-05-20',category:'อาหาร',amount:85,note:''},
+      {id:'t21',date:'2026-05-21',category:'อาหาร',amount:65,note:''},
+      {id:'t22',date:'2026-05-22',category:'อาหาร',amount:2425,note:''},
+      {id:'t23',date:'2026-05-24',category:'ช้อปปิ้ง',amount:1400,note:'Arknight id'},
+      {id:'t24',date:'2026-05-27',category:'อาหาร',amount:308.92,note:''},
+      {id:'t25',date:'2026-05-28',category:'อาหาร',amount:329,note:''},
+      {id:'t26',date:'2026-05-28',category:'ของใช้จำเป็น',amount:945,note:'Adapter'},
+      {id:'t27',date:'2026-05-30',category:'อาหาร',amount:1890,note:''},
+      {id:'t28',date:'2026-05-30',category:'บ้าน, สาธารณูปโภค',amount:7500,note:'Condo Rent'},
+    ],
+    income:[
+      {id:'i1',date:'2026-05-15',month:'2026-05',source:'Salary',amount:28842.92,note:'Monthly salary'},
+      {id:'i2',date:'2026-05-15',month:'2026-05',source:'Side / Amway',amount:1089.42,note:'Amway'},
+      {id:'i3',date:'2026-05-28',month:'2026-05',source:'Other',amount:945,note:'Kept'},
+    ],
+    budget:DEFAULT_BUDGET,
+    notes:{'2026-05':{good:'• Salary on time\n• Invested ฿6,713 (Gulf Energy)\n• Kept rent paid',improve:'• Food exceeded (฿8,406 vs ฿4,500)\n• Review vending machine spend\n• Plan Amway consistency'}},
+    portfolio:[],assets:[],goals:DEFAULT_GOALS,goalHits:{},
+    tax:{income:360000,rmf:24000,ssf:0,lifeIns:0,healthIns:0},
+  };
+}
+
+let DB=initDB(), activeMonth='2026-05', activeChart=null;
+function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(DB));const el=document.getElementById('last-saved');if(el)el.textContent=new Date().toLocaleTimeString();}
+function uid(){return'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function fmt(n,d=0){n=parseFloat(n)||0;if(n>=1e6)return'฿'+(n/1e6).toFixed(2)+'M';if(n>=1000)return'฿'+(n/1000).toFixed(d)+'k';return'฿'+n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function fmtFull(n){return'฿'+Math.round(parseFloat(n)||0).toLocaleString();}
+function monthLabel(m){if(!m)return'';const[y,mo]=m.split('-');return['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]+' '+y;}
+function txForMonth(m){return DB.transactions.filter(t=>t.date.startsWith(m));}
+function incForMonth(m){return DB.income.filter(i=>i.month===m);}
+function spentForMonth(m){return txForMonth(m).filter(t=>t.category!=='ออมเงิน, ลงทุน').reduce((s,t)=>s+(t.amount||0),0);}
+function investForMonth(m){return txForMonth(m).filter(t=>t.category==='ออมเงิน, ลงทุน').reduce((s,t)=>s+(t.amount||0),0);}
+function incTotalForMonth(m){return incForMonth(m).reduce((s,i)=>s+(i.amount||0),0);}
+
+// ═══════════════════════════════════════════════
+// ROUTER
+// ═══════════════════════════════════════════════
+const PAGE_TITLES={dashboard:'Dashboard',transactions:'Transactions',income:'Income',budget:'Budget Plan',notes:'Monthly Notes',fire:'FIRE Overview',portfolio:'Portfolio Log',networth:'Net Worth',tax:'Tax Planner',goals:'Goals'};
+function navigate(page){
+  if(activeChart){try{activeChart.destroy();}catch{}activeChart=null;}
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.page===page));
+  document.querySelectorAll('.bnav-item[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===page));
+  document.getElementById('page-title').textContent=PAGE_TITLES[page]||page;
+  const pages={dashboard:renderDashboard,transactions:renderTransactions,income:renderIncome,budget:renderBudget,notes:renderNotes,fire:renderFire,portfolio:renderPortfolio,networth:renderNetworth,tax:renderTax,goals:renderGoals};
+  if(pages[page])pages[page]();
+  document.getElementById('content').scrollTop=0;
+}
+document.querySelectorAll('.nav-item,.bnav-item[data-page]').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.page)));
+
+function toggleMore(){
+  document.getElementById('more-overlay').classList.toggle('open');
+  document.getElementById('more-sheet').classList.toggle('open');
+}
+
+function buildMonthSelect(){
+  const sel=document.getElementById('active-month');
+  const months=[];
+  for(let y=2025;y<=2027;y++)for(let m=1;m<=12;m++)months.push(`${y}-${String(m).padStart(2,'0')}`);
+  sel.innerHTML=months.map(m=>`<option value="${m}"${m===activeMonth?' selected':''}>${monthLabel(m)}</option>`).join('');
+  sel.onchange=()=>{activeMonth=sel.value;navigate(document.querySelector('.nav-item.active')?.dataset.page||'dashboard');};
+}
+
+// ═══════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════
+function renderDashboard(){
+  const spent=spentForMonth(activeMonth),invested=investForMonth(activeMonth),income=incTotalForMonth(activeMonth),balance=income-spent-invested;
+  const byCat={};txForMonth(activeMonth).filter(t=>t.category!=='ออมเงิน, ลงทุน').forEach(t=>{byCat[t.category]=(byCat[t.category]||0)+t.amount;});
+  const catRows=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const latest=DB.portfolio.at(-1);
+  const totalPortfolio=latest?['emergency','bitcoin','gold','rmf'].reduce((s,k)=>s+(parseFloat(latest[k])||0),0):0;
+  const fire40=16000*Math.pow(1.1,17)*12*25;
+  const budgetTotal=DB.budget.reduce((s,b)=>s+(b.allocation||0),0);
+
+  document.getElementById('content').innerHTML=`
+  <div class="grid-4">
+    <div class="stat-card"><div class="stat-label">Income ${monthLabel(activeMonth)}</div><div class="stat-val" style="color:#16a34a">${fmtFull(income)}</div><div class="stat-sub">${incForMonth(activeMonth).length} entries</div></div>
+    <div class="stat-card"><div class="stat-label">Spent</div><div class="stat-val" style="color:#dc2626">${fmtFull(spent)}</div><div class="stat-sub">Budget ${fmtFull(budgetTotal)}</div></div>
+    <div class="stat-card"><div class="stat-label">Invested</div><div class="stat-val" style="color:#F7931A">${fmtFull(invested)}</div><div class="stat-sub">${income>0?((invested/income)*100).toFixed(1):0}% of income</div></div>
+    <div class="stat-card"><div class="stat-label">Balance</div><div class="stat-val" style="color:${balance>=0?'#1a1917':'#dc2626'}">${balance>=0?'+':''}${fmtFull(balance)}</div><div class="stat-sub">${balance>=0?'Surplus':'Deficit'}</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Spending by Category</div>
+      <div style="position:relative"><canvas id="cat-chart" height="200"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top Spending</div>
+      ${catRows.map(([cat,amt])=>{
+        const bi=DB.budget.find(b=>b.item===BCAT_MAP[cat]);
+        const over=bi&&amt>bi.allocation;
+        const pct=bi?Math.min((amt/bi.allocation)*100,100):50;
+        return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;margin-bottom:2px;font-size:13px"><span>${CAT_MAP[cat]||cat}</span><span style="font-weight:600;color:${over?'#dc2626':'#1a1917'}">${fmtFull(amt)}</span></div><div class="progress"><div class="progress-fill" style="width:${pct}%;background:${over?'#ef4444':'#F7931A'}"></div></div></div>`;
+      }).join('')}
+      ${catRows.length===0?'<div class="empty-state">No transactions yet</div>':''}
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Recent Transactions</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Note</th></tr></thead><tbody>
+        ${txForMonth(activeMonth).slice(-6).reverse().map(t=>`<tr><td>${t.date.slice(5)}</td><td><span class="tag">${CAT_MAP[t.category]||t.category}</span></td><td style="font-weight:600">${fmtFull(t.amount)}</td><td style="color:#999;font-size:11px">${t.note||''}</td></tr>`).join('')}
+        ${txForMonth(activeMonth).length===0?'<tr><td colspan="4" class="empty-state">No transactions</td></tr>':''}
+      </tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-title">FIRE Progress — Age 40 Target</div>
+      <div class="fire-num">${fmt(totalPortfolio)}</div>
+      <div style="font-size:12px;color:#999;margin-bottom:8px">of ${fmt(fire40)} (10% inflation)</div>
+      <div class="progress" style="height:10px"><div class="progress-fill" style="width:${Math.min((totalPortfolio/fire40)*100,100)}%;background:#F7931A;height:10px"></div></div>
+      <div style="margin-top:10px;font-size:13px;color:#777">${((totalPortfolio/fire40)*100).toFixed(2)}% · ${DB.portfolio.length} months logged</div>
+      <button class="btn btn-primary btn-sm" style="margin-top:12px;width:100%" onclick="navigate('portfolio')">Log Portfolio Update →</button>
+    </div>
+  </div>`;
+
+  setTimeout(()=>{
+    const el=document.getElementById('cat-chart');if(!el)return;
+    activeChart=new Chart(el.getContext('2d'),{
+      type:'doughnut',
+      data:{labels:catRows.map(([c])=>CAT_MAP[c]||c),datasets:[{data:catRows.map(([,v])=>v),backgroundColor:['#F7931A','#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444'],borderWidth:0}]},
+      options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:8,boxWidth:12}}},cutout:'55%'}
+    });
+  },50);
+}
+
+// ═══════════════════════════════════════════════
+// TRANSACTIONS
+// ═══════════════════════════════════════════════
+function renderTransactions(){
+  const txs=txForMonth(activeMonth).slice().reverse();
+  const spent=txs.filter(t=>t.category!=='ออมเงิน, ลงทุน').reduce((s,t)=>s+(t.amount||0),0);
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div class="card-title">Add Transaction</div>
+    <div class="form-row cols-3">
+      <div><label>Date</label><input type="date" id="tx-date" value="${activeMonth}-01"></div>
+      <div><label>Amount (฿)</label><input type="number" id="tx-amount" placeholder="0" step="0.01"></div>
+      <div><label>Category</label><select id="tx-cat">${ALL_CATS.map(c=>`<option value="${c}">${(CAT_MAP[c]||c)+' ('+c+')'}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row cols-2">
+      <div><label>Note</label><input type="text" id="tx-note" placeholder="e.g. Grab, 7-11"></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" style="width:100%" onclick="addTx()">+ Add</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div class="card-title" style="margin:0">${monthLabel(activeMonth)} — <span style="color:#dc2626">${fmtFull(spent)} spent</span></div>
+      <span style="font-size:12px;color:#999">${txs.length} entries</span>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Note</th><th></th></tr></thead>
+      <tbody>${txs.map(t=>`<tr>
+        <td style="white-space:nowrap">${t.date}</td>
+        <td><span class="tag">${CAT_MAP[t.category]||t.category}</span></td>
+        <td style="font-weight:600;${t.category==='ออมเงิน, ลงทุน'?'color:#F7931A':''};white-space:nowrap">${fmtFull(t.amount)}</td>
+        <td style="color:#999;font-size:11px">${t.note||''}</td>
+        <td><button class="del-btn" onclick="delTx('${t.id}')">✕</button></td>
+      </tr>`).join('')}${txs.length===0?'<tr><td colspan="5" class="empty-state">No transactions this month</td></tr>':''}</tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Category Totals</div>
+    ${Object.entries(txForMonth(activeMonth).reduce((a,t)=>{a[t.category]=(a[t.category]||0)+t.amount;return a;},{})).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f4f3ef;font-size:13px"><span>${CAT_MAP[cat]||cat}</span><span style="font-weight:600;${cat==='ออมเงิน, ลงทุน'?'color:#F7931A':''}">${fmtFull(amt)}</span></div>`).join('')}
+    <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-weight:700;font-size:14px;border-top:2px solid #1a1917;margin-top:4px"><span>Total</span><span>${fmtFull(txs.reduce((s,t)=>s+(t.amount||0),0))}</span></div>
+  </div>`;
+}
+function addTx(){
+  const date=document.getElementById('tx-date').value,amount=parseFloat(document.getElementById('tx-amount').value),category=document.getElementById('tx-cat').value,note=document.getElementById('tx-note').value;
+  if(!date||!amount)return alert('Fill date and amount.');
+  DB.transactions.push({id:uid(),date,category,amount,note});
+  DB.transactions.sort((a,b)=>a.date.localeCompare(b.date));
+  save();checkGoals();renderTransactions();
+}
+function delTx(id){if(!confirm('Delete?'))return;DB.transactions=DB.transactions.filter(t=>t.id!==id);save();renderTransactions();}
+
+// ═══════════════════════════════════════════════
+// INCOME
+// ═══════════════════════════════════════════════
+function renderIncome(){
+  const inc=incForMonth(activeMonth),total=incTotalForMonth(activeMonth);
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div class="card-title">Add Income</div>
+    <div class="form-row cols-3">
+      <div><label>Date</label><input type="date" id="inc-date" value="${activeMonth}-01"></div>
+      <div><label>Amount (฿)</label><input type="number" id="inc-amount" placeholder="0" step="0.01"></div>
+      <div><label>Source</label><select id="inc-source"><option>Salary</option><option>Side / Amway</option><option>Freelance</option><option>Bitcoin gains</option><option>Other</option></select></div>
+    </div>
+    <div class="form-row cols-2">
+      <div><label>Note</label><input type="text" id="inc-note" placeholder="e.g. Monthly salary"></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" style="width:100%" onclick="addIncome()">+ Add</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div class="card-title" style="margin:0">Income — ${monthLabel(activeMonth)}</div>
+      <span style="font-size:18px;font-weight:700;color:#16a34a">${fmtFull(total)}</span>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Date</th><th>Source</th><th>Amount</th><th>Note</th><th></th></tr></thead>
+      <tbody>${inc.map(i=>`<tr>
+        <td style="white-space:nowrap">${i.date}</td><td><strong>${i.source}</strong></td>
+        <td style="font-weight:600;color:#16a34a;white-space:nowrap">${fmtFull(i.amount)}</td>
+        <td style="color:#999;font-size:11px">${i.note||''}</td>
+        <td><button class="del-btn" onclick="delIncome('${i.id}')">✕</button></td>
+      </tr>`).join('')}${inc.length===0?'<tr><td colspan="5" class="empty-state">No income this month</td></tr>':''}</tbody>
+    </table></div>
+    <div style="text-align:right;font-weight:700;padding-top:10px;border-top:2px solid #1a1917;margin-top:6px">Total: <span style="color:#16a34a">${fmtFull(total)}</span></div>
+  </div>`;
+}
+function addIncome(){
+  const date=document.getElementById('inc-date').value,amount=parseFloat(document.getElementById('inc-amount').value),source=document.getElementById('inc-source').value,note=document.getElementById('inc-note').value;
+  if(!date||!amount)return alert('Fill date and amount.');
+  DB.income.push({id:uid(),date,month:date.slice(0,7),source,amount,note});
+  save();renderIncome();
+}
+function delIncome(id){if(!confirm('Delete?'))return;DB.income=DB.income.filter(i=>i.id!==id);save();renderIncome();}
+
+// ═══════════════════════════════════════════════
+// BUDGET
+// ═══════════════════════════════════════════════
+function renderBudget(){
+  const txSpent={};txForMonth(activeMonth).forEach(t=>{txSpent[t.category]=(txSpent[t.category]||0)+t.amount;});
+  const totalBudget=DB.budget.reduce((s,b)=>s+(b.allocation||0),0);
+  const totalActual=txForMonth(activeMonth).reduce((s,t)=>s+(t.amount||0),0);
+  const cats=[...new Set(DB.budget.map(b=>b.category))];
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div class="card-title" style="margin:0">Budget vs Actual — ${monthLabel(activeMonth)}</div>
+      <div style="font-size:13px;color:#666">Budget: ${fmtFull(totalBudget)} · Actual: <span style="color:${totalActual>totalBudget?'#dc2626':'#16a34a'};font-weight:600">${fmtFull(totalActual)}</span></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Category</th><th>Item</th><th>Budget</th><th>Actual</th><th>Diff</th><th style="min-width:90px">Edit</th></tr></thead>
+      <tbody>${cats.map(cat=>DB.budget.filter(b=>b.category===cat).map((b,i)=>{
+        const tc=BCAT_MAP[Object.keys(BCAT_MAP).find(k=>BCAT_MAP[k]===b.item)||''];
+        const actual=tc?txSpent[tc]||0:0;
+        const diff=b.allocation-actual;
+        return`<tr>${i===0?`<td rowspan="${DB.budget.filter(x=>x.category===cat).length}" style="font-weight:600;color:#555;font-size:12px;vertical-align:top;padding-top:11px">${cat}</td>`:''}
+          <td>${b.item}</td><td>${fmtFull(b.allocation)}</td>
+          <td style="font-weight:600">${actual>0?fmtFull(actual):'—'}</td>
+          <td class="${diff<0?'budget-over':'budget-ok'}">${diff<0?'−'+fmtFull(Math.abs(diff)):diff>0?'+'+fmtFull(diff):'—'}</td>
+          <td><input type="number" value="${b.allocation}" style="width:80px;border:1px solid #e0ded8;border-radius:4px;padding:4px 6px;font-size:12px" onchange="updateBudget('${b.id}',this.value)"></td>
+        </tr>`;}).join('')).join('')}
+      </tbody>
+      <tfoot><tr style="font-weight:700;background:#f4f3ef"><td colspan="2">Total</td><td>${fmtFull(totalBudget)}</td><td style="color:${totalActual>totalBudget?'#dc2626':'#16a34a'}">${fmtFull(totalActual)}</td><td class="${totalActual>totalBudget?'budget-over':'budget-ok'}">${totalActual>totalBudget?'−':'+'}${fmtFull(Math.abs(totalBudget-totalActual))}</td><td></td></tr></tfoot>
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Add Budget Line</div>
+    <div class="form-row cols-3">
+      <div><label>Category</label><input type="text" id="bcat" placeholder="e.g. Survival"></div>
+      <div><label>Item Name</label><input type="text" id="bitem" placeholder="e.g. Gym"></div>
+      <div><label>Monthly (฿)</label><input type="number" id="balloc" placeholder="0"></div>
+    </div>
+    <button class="btn btn-primary" onclick="addBudget()">+ Add Line</button>
+  </div>`;
+}
+function updateBudget(id,val){const b=DB.budget.find(x=>x.id===id);if(b){b.allocation=parseFloat(val)||0;save();}}
+function addBudget(){
+  const cat=document.getElementById('bcat').value.trim(),item=document.getElementById('bitem').value.trim(),alloc=parseFloat(document.getElementById('balloc').value)||0;
+  if(!cat||!item)return alert('Fill category and item.');
+  DB.budget.push({id:uid(),category:cat,item,allocation:alloc});save();renderBudget();
+}
+
+// ═══════════════════════════════════════════════
+// NOTES
+// ═══════════════════════════════════════════════
+function renderNotes(){
+  const n=DB.notes[activeMonth]||{good:'',improve:''};
+  const months=Object.keys(DB.notes).sort().reverse();
+  document.getElementById('content').innerHTML=`
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">✅ What went well — ${monthLabel(activeMonth)}</div>
+      <textarea id="note-good" style="min-height:120px;width:100%;border:1px solid #e0ded8;border-radius:8px;padding:10px;font-size:14px;outline:none;resize:vertical" placeholder="• Salary on time&#10;• Kept DCA consistent...">${n.good}</textarea>
+    </div>
+    <div class="card">
+      <div class="card-title">⚠️ What to improve — ${monthLabel(activeMonth)}</div>
+      <textarea id="note-improve" style="min-height:120px;width:100%;border:1px solid #e0ded8;border-radius:8px;padding:10px;font-size:14px;outline:none;resize:vertical" placeholder="• Food budget exceeded&#10;• Review subscriptions...">${n.improve}</textarea>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:14px">
+    <button class="btn btn-primary" onclick="saveNote()">Save Notes</button>
+    <span id="note-saved" style="font-size:13px;color:#16a34a;line-height:40px"></span>
+  </div>
+  ${months.length>0?`<div class="card"><div class="card-title">Previous Notes</div>${months.filter(m=>DB.notes[m]&&(DB.notes[m].good||DB.notes[m].improve)).map(m=>`
+    <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #f0efe8">
+      <div style="font-weight:700;color:#F7931A;margin-bottom:8px">${monthLabel(m)}</div>
+      <div class="grid-2">
+        ${DB.notes[m].good?`<div><div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:4px">✅ WENT WELL</div><div style="font-size:13px;white-space:pre-line;color:#555">${DB.notes[m].good}</div></div>`:''}
+        ${DB.notes[m].improve?`<div><div style="font-size:11px;color:#dc2626;font-weight:600;margin-bottom:4px">⚠ TO IMPROVE</div><div style="font-size:13px;white-space:pre-line;color:#555">${DB.notes[m].improve}</div></div>`:''}
+      </div>
+    </div>`).join('')}</div>`:''}`;
+}
+function saveNote(){
+  DB.notes[activeMonth]={good:document.getElementById('note-good').value,improve:document.getElementById('note-improve').value};
+  save();const el=document.getElementById('note-saved');if(el){el.textContent='Saved ✓';setTimeout(()=>{if(document.getElementById('note-saved'))document.getElementById('note-saved').textContent='';},2000);}
+}
+
+// ═══════════════════════════════════════════════
+// FIRE MATH
+// ═══════════════════════════════════════════════
+function projPort(months){const m=0.30/12;let v=50000;for(let i=0;i<months;i++)v=v*(1+m)+(i<8?4500:10500);return v;}
+function fireTarget(yrs){return 16000*Math.pow(1.1,yrs)*12*25;}
+function runwayAge(retireAge,portfolio,postReturn){
+  const yrs=retireAge-23;let annual=16000*Math.pow(1.1,yrs)*12,p=portfolio;
+  for(let y=0;y<120;y++){p=p*(1+postReturn)-annual;annual*=1.1;if(p<=0)return retireAge+y+1;}return 999;
+}
+
+// ═══════════════════════════════════════════════
+// FIRE OVERVIEW
+// ═══════════════════════════════════════════════
+function renderFire(){
+  const latest=DB.portfolio.at(-1);
+  const totalPortfolio=latest?['emergency','bitcoin','gold','rmf'].reduce((s,k)=>s+(parseFloat(latest[k])||0),0):0;
+  const mo=DB.portfolio.length,projNow=projPort(mo),diff=totalPortfolio-projNow;
+  const fire40=fireTarget(17),fire35=fireTarget(12);
+  const rwy35=runwayAge(35,Math.max(totalPortfolio,projPort(144)),0.10);
+  const rwy40=runwayAge(40,Math.max(totalPortfolio,projPort(204)),0.10);
+  const cd=Array.from({length:18},(_,y)=>{
+    const pt={age:23+y,proj:Math.round(projPort(y*12)),fire:Math.round(fireTarget(y))};
+    if(y*12<DB.portfolio.length&&DB.portfolio[y*12])pt.actual=Math.round(['emergency','bitcoin','gold','rmf'].reduce((s,k)=>s+(parseFloat(DB.portfolio[y*12][k])||0),0));
+    return pt;
+  });
+  document.getElementById('content').innerHTML=`
+  <div class="grid-4">
+    <div class="stat-card"><div class="stat-label">Portfolio</div><div class="stat-val" style="color:#F7931A">${fmt(totalPortfolio)}</div><div class="stat-sub">${mo} months logged</div></div>
+    <div class="stat-card"><div class="stat-label">vs Base Plan</div><div class="stat-val" style="color:${diff>=0?'#16a34a':'#dc2626'}">${diff>=0?'+':''}${fmt(diff)}</div><div class="stat-sub">${diff>=0?'Ahead':'Behind'}</div></div>
+    <div class="stat-card"><div class="stat-label">FIRE at 35</div><div class="stat-val">${fmt(fire35)}</div><div class="stat-sub">${((totalPortfolio/fire35)*100).toFixed(1)}% there</div></div>
+    <div class="stat-card"><div class="stat-label">FIRE at 40</div><div class="stat-val">${fmt(fire40)}</div><div class="stat-sub">${((totalPortfolio/fire40)*100).toFixed(1)}% there</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Portfolio vs Projected (10% inflation)</div>
+      <div style="position:relative"><canvas id="fire-chart" height="220"></canvas></div>
+      <div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:#999;flex-wrap:wrap">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#F7931A;border-radius:2px;margin-right:3px"></span>Base 30%/yr</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#3b82f6;border-radius:2px;margin-right:3px"></span>Actual</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:2px;margin-right:3px"></span>FIRE target</span>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">💀 Runway — When Money Hits ฿0</div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;color:#999;margin-bottom:3px">Retire at 35, 10%/yr portfolio return:</div>
+          <div style="font-size:22px;font-weight:700;color:${rwy35===999?'#16a34a':'#F7931A'}">${rwy35===999?'Never runs out ∞':'Runs out age '+rwy35}</div>
+          <div style="font-size:12px;color:#999">${rwy35===999?'Grows faster than withdrawals':rwy35-35+' yrs of retirement'}</div>
+        </div>
+        <div style="padding-top:12px;border-top:1px solid #f0efe8">
+          <div style="font-size:12px;color:#999;margin-bottom:3px">Retire at 40:</div>
+          <div style="font-size:22px;font-weight:700;color:${rwy40===999?'#16a34a':'#F7931A'}">${rwy40===999?'Never runs out ∞':'Runs out age '+rwy40}</div>
+          <div style="font-size:12px;color:#999">${rwy40===999?'Solid foundation':rwy40-40+' yrs of retirement'}</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Inflation-Adjusted Targets</div>
+        ${[30,35,40].map(age=>{const t=fireTarget(age-23);const p=Math.min((totalPortfolio/t)*100,100);return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span>Age ${age}</span><span style="font-weight:600">${fmt(t)}</span></div><div class="progress"><div class="progress-fill" style="width:${p}%;background:#F7931A"></div></div><div style="font-size:11px;color:#999">${p.toFixed(1)}%</div></div>`;}).join('')}
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>{const el=document.getElementById('fire-chart');if(!el)return;
+    activeChart=new Chart(el.getContext('2d'),{type:'line',data:{labels:cd.map(d=>''+d.age),datasets:[
+      {label:'Plan',data:cd.map(d=>d.proj),borderColor:'#F7931A',borderWidth:2,pointRadius:0,tension:.4,borderDash:[4,3],fill:false},
+      {label:'Actual',data:cd.map(d=>d.actual),borderColor:'#3b82f6',borderWidth:2,pointRadius:4,tension:.4,fill:false,spanGaps:false},
+      {label:'FIRE',data:cd.map(d=>d.fire),borderColor:'#ef4444',borderWidth:1.5,pointRadius:0,tension:0,borderDash:[2,4],fill:false},
+    ]},options:{responsive:true,plugins:{legend:{display:false}},scales:{
+      x:{ticks:{font:{size:10},color:'#aaa'},grid:{display:false}},
+      y:{ticks:{font:{size:10},color:'#aaa',callback:v=>fmt(v)},grid:{color:'#f4f3ef'}},
+    }}});
+  },50);
+}
+
+// ═══════════════════════════════════════════════
+// PORTFOLIO LOG
+// ═══════════════════════════════════════════════
+function renderPortfolio(){
+  const entries=[...DB.portfolio].reverse();
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div class="card-title">Log Monthly Snapshot</div>
+    <div style="font-size:12px;color:#999;margin-bottom:12px">Enter your <strong>current total balances</strong> once a month.</div>
+    <div class="form-row cols-3">
+      <div><label>Month</label><input type="month" id="p-date" value="${activeMonth}"></div>
+      <div><label>Emergency Fund (฿)</label><input type="number" id="p-emg" placeholder="50000"></div>
+      <div><label>Bitcoin THB Value</label><input type="number" id="p-btc" placeholder="e.g. 45000"></div>
+    </div>
+    <div class="form-row cols-3">
+      <div><label>Gold (฿)</label><input type="number" id="p-gold" placeholder="0"></div>
+      <div><label>RMF (฿)</label><input type="number" id="p-rmf" placeholder="0"></div>
+      <div><label>Salary this month</label><input type="number" id="p-salary" placeholder="30000"></div>
+    </div>
+    <div class="form-row"><div><label>Notes</label><input type="text" id="p-notes" placeholder="e.g. Kept DCA, BTC dipped"></div></div>
+    <button class="btn btn-primary" style="width:100%" onclick="addPortfolio()">Save Snapshot</button>
+  </div>
+  <div class="card">
+    <div class="card-title">History</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Month</th><th>Emergency</th><th>Bitcoin</th><th>Gold</th><th>RMF</th><th>Total</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${entries.map(e=>{
+        const total=['emergency','bitcoin','gold','rmf'].reduce((s,k)=>s+(parseFloat(e[k])||0),0);
+        return`<tr><td><strong>${e.date}</strong></td><td>${fmtFull(e.emergency)}</td><td style="color:#F7931A;font-weight:600">${fmtFull(e.bitcoin)}</td><td>${fmtFull(e.gold)}</td><td>${fmtFull(e.rmf)}</td><td><strong>${fmt(total)}</strong></td><td style="font-size:11px;color:#999;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.notes||''}</td><td><button class="del-btn" onclick="delPortfolio('${e.id}')">✕</button></td></tr>`;
+      }).join('')}${entries.length===0?'<tr><td colspan="8" class="empty-state">Log your first snapshot above</td></tr>':''}</tbody>
+    </table></div>
+  </div>`;
+}
+function addPortfolio(){
+  const date=document.getElementById('p-date').value;if(!date)return alert('Select month.');
+  const entry={id:uid(),date,emergency:parseFloat(document.getElementById('p-emg').value)||0,bitcoin:parseFloat(document.getElementById('p-btc').value)||0,gold:parseFloat(document.getElementById('p-gold').value)||0,rmf:parseFloat(document.getElementById('p-rmf').value)||0,salary:parseFloat(document.getElementById('p-salary').value)||0,notes:document.getElementById('p-notes').value};
+  const idx=DB.portfolio.findIndex(p=>p.date===date);
+  if(idx>=0)DB.portfolio[idx]=entry;else{DB.portfolio.push(entry);DB.portfolio.sort((a,b)=>a.date.localeCompare(b.date));}
+  save();checkGoals();renderPortfolio();
+}
+function delPortfolio(id){if(!confirm('Delete?'))return;DB.portfolio=DB.portfolio.filter(p=>p.id!==id);save();renderPortfolio();}
+
+// ═══════════════════════════════════════════════
+// NET WORTH
+// ═══════════════════════════════════════════════
+function renderNetworth(){
+  const ta=DB.assets.filter(a=>a.type==='asset').reduce((s,a)=>s+(parseFloat(a.value)||0),0);
+  const tl=DB.assets.filter(a=>a.type==='liability').reduce((s,a)=>s+(parseFloat(a.value)||0),0);
+  const net=ta-tl;
+  const aCats=['Cash / Wallet','Savings Account','Emergency Fund','Bitcoin','Gold','RMF / SSF','Property','Vehicle','Other'];
+  const lCats=['Credit Card','Personal Loan','Student Loan','Mortgage','Other Debt'];
+  document.getElementById('content').innerHTML=`
+  <div class="grid-3" style="margin-bottom:14px">
+    <div class="stat-card" style="text-align:center"><div class="stat-label">Total Assets</div><div class="stat-val" style="color:#16a34a">${fmtFull(ta)}</div></div>
+    <div class="stat-card" style="text-align:center"><div class="stat-label">Total Debt</div><div class="stat-val" style="color:#dc2626">${fmtFull(tl)}</div></div>
+    <div class="stat-card" style="text-align:center"><div class="stat-label">Net Worth</div><div class="stat-val" style="color:${net>=0?'#F7931A':'#dc2626'}">${fmtFull(net)}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Add Item</div>
+    <div class="form-row cols-4">
+      <div><label>Type</label><select id="at-type" onchange="document.getElementById('at-cat').innerHTML=(this.value==='asset'?${JSON.stringify(aCats)}:${JSON.stringify(lCats)}).map(c=>'<option>'+c+'</option>').join('')"><option value="asset">Asset</option><option value="liability">Liability</option></select></div>
+      <div><label>Category</label><select id="at-cat">${aCats.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div><label>Name</label><input type="text" id="at-name" placeholder="e.g. KBank account"></div>
+      <div><label>Value (฿)</label><input type="number" id="at-value" placeholder="0"></div>
+    </div>
+    <button class="btn btn-primary" onclick="addAsset()">+ Add</button>
+  </div>
+  ${DB.assets.filter(a=>a.type==='asset').length>0?`<div class="card"><div class="card-title">Assets</div><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Category</th><th>Value (฿)</th><th></th></tr></thead><tbody>
+    ${DB.assets.filter(a=>a.type==='asset').map(a=>`<tr><td><strong>${a.name}</strong></td><td><span class="tag">${a.category}</span></td><td><input type="number" value="${a.value}" style="width:110px;border:1px solid #e0ded8;border-radius:4px;padding:4px 6px;font-size:13px" onchange="updateAsset('${a.id}',this.value)"></td><td><button class="del-btn" onclick="delAsset('${a.id}')">✕</button></td></tr>`).join('')}
+  </tbody></table></div><div style="text-align:right;font-weight:700;padding-top:8px;border-top:1px solid #f0efe8;margin-top:4px;color:#16a34a">Total Assets: ${fmtFull(ta)}</div></div>`:''}
+  ${DB.assets.filter(a=>a.type==='liability').length>0?`<div class="card"><div class="card-title">Liabilities</div><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Category</th><th>Amount (฿)</th><th></th></tr></thead><tbody>
+    ${DB.assets.filter(a=>a.type==='liability').map(a=>`<tr><td><strong>${a.name}</strong></td><td><span class="tag">${a.category}</span></td><td><input type="number" value="${a.value}" style="width:110px;border:1px solid #e0ded8;border-radius:4px;padding:4px 6px;font-size:13px" onchange="updateAsset('${a.id}',this.value)"></td><td><button class="del-btn" onclick="delAsset('${a.id}')">✕</button></td></tr>`).join('')}
+  </tbody></table></div><div style="text-align:right;font-weight:700;padding-top:8px;border-top:1px solid #f0efe8;margin-top:4px;color:#dc2626">Total Debt: ${fmtFull(tl)}</div></div>`:''}
+  ${DB.assets.length===0?'<div class="empty-state card">Add your assets and liabilities above.</div>':''}`;
+}
+function addAsset(){const type=document.getElementById('at-type').value,cat=document.getElementById('at-cat').value,name=document.getElementById('at-name').value.trim(),value=parseFloat(document.getElementById('at-value').value)||0;if(!name)return alert('Enter a name.');DB.assets.push({id:uid(),type,category:cat,name,value});save();renderNetworth();}
+function delAsset(id){if(!confirm('Delete?'))return;DB.assets=DB.assets.filter(a=>a.id!==id);save();renderNetworth();}
+function updateAsset(id,val){const a=DB.assets.find(x=>x.id===id);if(a){a.value=parseFloat(val)||0;save();}}
+
+// ═══════════════════════════════════════════════
+// TAX
+// ═══════════════════════════════════════════════
+function thaiTax(inc,rmf=0,ssf=0,li=0,hi=0){
+  const ed=Math.min(inc*.5,100000),pd=60000;
+  const td=ed+pd+Math.min(rmf,inc*.30,500000)+Math.min(ssf,inc*.30,200000)+Math.min(li,100000)+Math.min(hi,25000);
+  const tx=Math.max(0,inc-td);
+  const brackets=[[150000,0],[150000,.05],[200000,.10],[250000,.15],[250000,.20],[1000000,.25],[3000000,.30],[Infinity,.35]];
+  let tax=0,rem=tx;for(const[sz,rate]of brackets){if(rem<=0)break;tax+=Math.min(rem,sz)*rate;rem-=sz;}
+  return{taxable:tx,tax:Math.round(tax),totalDed:td};
+}
+function renderTax(){
+  const t=DB.tax,before=thaiTax(t.income),after=thaiTax(t.income,t.rmf,t.ssf,t.lifeIns,t.healthIns),saved=before.tax-after.tax,maxRmf=Math.min(t.income*.30,500000);
+  document.getElementById('content').innerHTML=`
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Income & Deductions</div>
+      <div class="form-row cols-2">
+        <div><label>Annual Income (฿)</label><input type="number" id="tx-inc" value="${t.income}" onchange="updateTax('income',this.value)"></div>
+        <div><label>= Monthly</label><input type="number" value="${Math.round(t.income/12)}" readonly style="background:#f4f3ef;color:#999"></div>
+      </div>
+      <div class="section-divider">Tax Reduction Tools</div>
+      ${[['rmf',`RMF (max ${fmtFull(maxRmf)})`,maxRmf],['ssf','SSF (max ฿200k)',Math.min(t.income*.30,200000)],['lifeIns','Life Insurance (max ฿100k)',100000],['healthIns','Health Insurance (max ฿25k)',25000]].map(([k,label,max])=>`
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+            <label style="font-size:12px;color:#666;text-transform:none;letter-spacing:0;margin:0">${label}</label>
+            <strong style="color:#F7931A">${fmtFull(t[k]||0)}</strong>
+          </div>
+          <input type="range" min="0" max="${max}" step="1000" value="${t[k]||0}" oninput="updateTax('${k}',this.value)" style="width:100%;accent-color:#F7931A;margin-bottom:6px">
+          <input type="number" value="${t[k]||0}" onchange="updateTax('${k}',this.value)">
+        </div>`).join('')}
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">Result</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <div style="background:#fef2f2;border-radius:8px;padding:14px;text-align:center"><div style="font-size:11px;color:#dc2626;font-weight:600;text-transform:uppercase;margin-bottom:4px">Without</div><div style="font-size:22px;font-weight:700;color:#dc2626">${fmtFull(before.tax)}</div></div>
+          <div style="background:#f0fdf4;border-radius:8px;padding:14px;text-align:center"><div style="font-size:11px;color:#16a34a;font-weight:600;text-transform:uppercase;margin-bottom:4px">With Deductions</div><div style="font-size:22px;font-weight:700;color:#16a34a">${fmtFull(after.tax)}</div></div>
+        </div>
+        <div style="background:#fffbf5;border:1px solid #fed7aa;border-radius:8px;padding:14px;text-align:center;margin-bottom:12px">
+          <div style="font-size:11px;color:#c2410c;font-weight:600;text-transform:uppercase;margin-bottom:4px">Annual Tax Saved</div>
+          <div style="font-size:26px;font-weight:700;color:#F7931A">${fmtFull(saved)}</div>
+          <div style="font-size:12px;color:#999;margin-top:3px">${fmtFull(saved/12)}/month · ${t.income>0?((after.tax/t.income)*100).toFixed(2):0}% effective rate</div>
+        </div>
+        <div style="font-size:13px;color:#666;line-height:1.8">
+          Taxable income: ${fmtFull(after.taxable)}<br>
+          Unused RMF: ${fmtFull(Math.max(0,maxRmf-(t.rmf||0)))} → ${fmtFull(Math.max(0,maxRmf-(t.rmf||0))/12)}/mo<br>
+          Tax refund month: <strong>March</strong> → recycle into BTC DCA
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Thai Tax Brackets</div>
+        ${[[0,150000,'0%'],[150001,300000,'5%'],[300001,500000,'10%'],[500001,750000,'15%'],[750001,1000000,'20%'],[1000001,2000000,'25%'],[2000001,5000000,'30%'],[5000001,99999999,'35%']].map(([lo,hi,rate])=>{
+          const inB=after.taxable>lo;
+          return`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f4f3ef;font-size:12px"><span style="color:${inB?'#F7931A':'#999'}">${lo.toLocaleString()} – ${hi>9e6?'∞':hi.toLocaleString()}</span><span style="font-weight:${inB?700:400};color:${inB?'#F7931A':'#999'}">${rate}</span></div>`;
+        }).join('')}
+        <div style="font-size:12px;color:#888;margin-top:8px">Taxable income: <strong style="color:#F7931A">${fmtFull(after.taxable)}</strong></div>
+      </div>
+    </div>
+  </div>`;
+}
+function updateTax(k,v){DB.tax[k]=parseFloat(v)||0;save();renderTax();}
+
+// ═══════════════════════════════════════════════
+// GOALS
+// ═══════════════════════════════════════════════
+function checkGoals(){
+  const latest=DB.portfolio.at(-1);if(!latest)return;
+  const total=['emergency','bitcoin','gold','rmf'].reduce((s,k)=>s+(parseFloat(latest[k])||0),0);
+  DB.goals.forEach(g=>{
+    if(DB.goalHits[g.id])return;
+    const v=g.cat==='bitcoin'?(parseFloat(latest.bitcoin)||0):g.cat==='emergency'?(parseFloat(latest.emergency)||0):g.cat==='income'?(parseFloat(latest.salary)||0):total;
+    if(v>=g.target)DB.goalHits[g.id]=latest.date;
+  });save();
+}
+function renderGoals(){
+  const latest=DB.portfolio.at(-1);
+  const total=latest?['emergency','bitcoin','gold','rmf'].reduce((s,k)=>s+(parseFloat(latest[k])||0),0):0;
+  const btc=parseFloat(latest?.bitcoin)||0,emg=parseFloat(latest?.emergency)||0;
+  const done=DB.goals.filter(g=>DB.goalHits[g.id]).length;
+  document.getElementById('content').innerHTML=`
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="card-title" style="margin:0">Milestones</div>
+      <span style="font-size:16px;font-weight:700;color:#F7931A">${done} / ${DB.goals.length}</span>
+    </div>
+    <div class="progress" style="height:10px"><div class="progress-fill" style="width:${(done/DB.goals.length)*100}%;background:#F7931A;height:10px"></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:14px">
+    ${DB.goals.map(g=>{
+      const dn=!!DB.goalHits[g.id];
+      const cur=g.cat==='bitcoin'?btc:g.cat==='emergency'?emg:total;
+      const pct=Math.min((cur/g.target)*100,100);
+      const color=CAT_COLORS[g.cat]||'#F7931A';
+      return`<div style="background:#fff;border:1px solid ${dn?color+'55':'#e8e6e0'};border-radius:10px;padding:14px;opacity:${dn?.75:1}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+          <div><div style="font-size:14px;font-weight:600;color:${dn?color:'#1a1917'}">${dn?'✓ ':''} ${g.name}</div><div style="font-size:12px;color:#999;margin-top:2px">${g.note}</div></div>
+          <div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:${color}">${fmtFull(g.target)}</div>${dn?`<div style="font-size:10px;color:#999">${DB.goalHits[g.id]}</div>`:''}</div>
+        </div>
+        ${!dn?`<div class="progress"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div><div style="display:flex;justify-content:space-between;font-size:11px;color:#999;margin-top:3px"><span>${fmtFull(cur)} / ${fmtFull(g.target)}</span><span>${pct.toFixed(1)}%</span></div>`:''}
+        <span style="font-size:10px;padding:2px 7px;border-radius:99px;background:${color}22;color:${color};font-weight:600;display:inline-block;margin-top:6px;letter-spacing:.04em">${g.cat.toUpperCase()}</span>
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="card">
+    <div class="card-title">Add Custom Goal</div>
+    <div class="form-row cols-4">
+      <div><label>Name</label><input type="text" id="g-name" placeholder="Goal name"></div>
+      <div><label>Target (฿)</label><input type="number" id="g-target" placeholder="250000"></div>
+      <div><label>Category</label><select id="g-cat">${['portfolio','bitcoin','emergency','income','realestate','custom'].map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div><label>Note</label><input type="text" id="g-note" placeholder="Why this matters"></div>
+    </div>
+    <button class="btn btn-primary" onclick="addGoal()">+ Add Goal</button>
+  </div>`;
+}
+function addGoal(){
+  const name=document.getElementById('g-name').value.trim(),target=parseFloat(document.getElementById('g-target').value)||0,cat=document.getElementById('g-cat').value,note=document.getElementById('g-note').value;
+  if(!name||!target)return alert('Fill name and target.');
+  DB.goals.push({id:uid(),name,target,cat,note});save();renderGoals();
+}
+
+// ═══════════════════════════════════════════════
+// EXPORT / IMPORT
+// ═══════════════════════════════════════════════
+function exportData(){const b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='finance_'+new Date().toISOString().slice(0,10)+'.json';a.click();}
+function importData(){const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{DB=JSON.parse(ev.target.result);save();alert('Imported.');navigate('dashboard');}catch{alert('Invalid file.');}};r.readAsText(f);};inp.click();}
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+buildMonthSelect();
+navigate('dashboard');
+save();
+</script>
+</body>
+</html>
