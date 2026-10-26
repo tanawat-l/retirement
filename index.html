@@ -1148,7 +1148,7 @@ function investmentsInvested(){return(DB.customInvestments||[]).reduce((s,iv)=>s
 function assetSum(cat){return(DB.assets||[]).filter(a=>a.type==='asset'&&a.category===cat).reduce((s,a)=>s+(parseFloat(a.value)||0),0);}
 function totalAssets(){return(DB.assets||[]).filter(a=>a.type==='asset').reduce((s,a)=>s+(parseFloat(a.value)||0),0);}
 function totalLiab(){return(DB.assets||[]).filter(a=>a.type==='liability').reduce((s,a)=>s+(parseFloat(a.value)||0),0);}
-function getFireData(){const latest=DB.portfolio.at(-1);return{emg:assetSum('กองทุนฉุกเฉิน')||parseFloat(latest?.emergency)||0,gold:assetSum('ทองคำ')||parseFloat(latest?.gold)||0,rmf:assetSum('RMF / SSF')||parseFloat(latest?.rmf)||0,re:assetSum('กองทุนอสังหาริมทรัพย์')||parseFloat(latest?.realEstate)||0,invVal:investmentsValue()};}
+function getFireData(){const sortedSnaps=[...(DB.portfolio||[])].sort((a,b)=>a.date.localeCompare(b.date));const latest=sortedSnaps[sortedSnaps.length-1];return{emg:assetSum('กองทุนฉุกเฉิน')||parseFloat(latest?.emergency)||0,gold:assetSum('ทองคำ')||parseFloat(latest?.gold)||0,rmf:assetSum('RMF / SSF')||parseFloat(latest?.rmf)||0,re:assetSum('กองทุนอสังหาริมทรัพย์')||parseFloat(latest?.realEstate)||0,invVal:investmentsValue()};}
 function portfolioTotal(){
   if(!DB.assets||DB.assets.length===0){const latest=DB.portfolio.at(-1);if(!latest)return investmentsValue();return investmentsValue()+(parseFloat(latest.emergency)||0)+(parseFloat(latest.gold)||0)+(parseFloat(latest.rmf)||0)+(parseFloat(latest.realEstate)||0);}
   return totalAssets()-totalLiab()+investmentsValue();
@@ -1235,21 +1235,22 @@ function _fetchTimeout(url,opts,ms){
 // nothing else -- the encrypted blob never leaves the server.
 // Token is cached in memory only (never localStorage) and silently
 // refreshed a little before it expires (Firebase anon tokens last ~1hr).
-let _anonIdToken=null,_anonRefreshToken=null,_anonTokenExp=0;
+let _anonIdToken=null,_anonRefreshToken=null,_anonTokenExp=0,_anonAuthError='';
 async function ensureAnonAuth(){
   if(!FIREBASE_API_KEY)return null; // no key configured -> falls back to open-rules behavior
   if(_anonIdToken&&Date.now()<_anonTokenExp)return _anonIdToken;
+  _anonAuthError='';
   try{
     if(_anonRefreshToken){
       const r=await _fetchTimeout('https://securetoken.googleapis.com/v1/token?key='+encodeURIComponent(FIREBASE_API_KEY),{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=refresh_token&refresh_token='+encodeURIComponent(_anonRefreshToken)},8000);
       if(r.ok){const d=await r.json();_anonIdToken=d.id_token;_anonRefreshToken=d.refresh_token;_anonTokenExp=Date.now()+(parseInt(d.expires_in||'3600',10)-120)*1000;return _anonIdToken;}
     }
     const r=await _fetchTimeout('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+encodeURIComponent(FIREBASE_API_KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({returnSecureToken:true})},8000);
-    if(!r.ok)return null;
+    if(!r.ok){const b=await r.json().catch(()=>null);_anonAuthError=(b&&b.error&&b.error.message)||('HTTP '+r.status);return null;}
     const d=await r.json();
     _anonIdToken=d.idToken;_anonRefreshToken=d.refreshToken;_anonTokenExp=Date.now()+(parseInt(d.expiresIn||'3600',10)-120)*1000;
     return _anonIdToken;
-  }catch(e){console.warn('Anon auth failed:',e);return null;}
+  }catch(e){_anonAuthError=e.message;console.warn('Anon auth failed:',e);return null;}
 }
 async function authedUrl(baseUrl){
   const t=await ensureAnonAuth();
@@ -1289,7 +1290,10 @@ async function cloudPull(force){
   if(!dbKey){updateSyncBadge('off');return false;}
   updateSyncBadge('busy');
   try{
-    const r=await _fetchTimeout(await authedUrl(url),{},8000);
+    const token=await ensureAnonAuth();
+    if(FIREBASE_API_KEY&&!token){updateSyncBadge('err','Sign-in failed: '+(_anonAuthError||'unknown')+' — check Anonymous sign-in is enabled (Firebase Console → Authentication → Sign-in method)');return false;}
+    const finalUrl=token?url+(url.indexOf('?')>-1?'&':'?')+'auth='+encodeURIComponent(token):url;
+    const r=await _fetchTimeout(finalUrl,{},8000);
     if(!r.ok){
       const body=await r.text().catch(()=>'');
       const is403=r.status===401||r.status===403;
@@ -1324,7 +1328,10 @@ async function cloudPush(encryptedBlob){
   try{
     const body=encryptedBlob||(dbKey?await encryptWithKey(dbKey,JSON.stringify(DB)):null);
     if(!body)return false;
-    const r=await _fetchTimeout(await authedUrl(url),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},8000);
+    const token=await ensureAnonAuth();
+    if(FIREBASE_API_KEY&&!token){updateSyncBadge('err','Sign-in failed: '+(_anonAuthError||'unknown')+' — check Anonymous sign-in is enabled (Firebase Console → Authentication → Sign-in method)');return false;}
+    const finalUrl=token?url+(url.indexOf('?')>-1?'&':'?')+'auth='+encodeURIComponent(token):url;
+    const r=await _fetchTimeout(finalUrl,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},8000);
     if(r.ok){updateSyncBadge('ok','Saved '+new Date().toLocaleTimeString());return true;}
     const b=await r.text().catch(()=>'');updateSyncBadge('err','Push '+r.status+': '+b.slice(0,80));return false;
   }catch(e){updateSyncBadge('err',e.message==='Timeout'?'Push timed out':'Push: '+e.message);return false;}
