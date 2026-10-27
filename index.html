@@ -19,13 +19,18 @@
        module) to compile its WebAssembly binary -- without it, every
        login/unlock throws "Refused to create a WebAssembly object".
        Tesseract.js's OCR engine also needs this for the same reason.
-     - Tesseract.js (OCR) is the only feature that talks to the network;
-       its CDN + the extra hosts it fetches its WASM engine/language data
-       from are the only external hosts allowed below. Everything else
-       (Chart.js, the Excel exporter, Argon2id) is bundled inline further
-       down, so no other external script/connect host should ever be
-       needed. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
+     - Tesseract.js (OCR) needs script-src for its CDN + WASM/language
+       data hosts. connect-src also allows the hosts the private build's
+       CLOUD SYNC + LIVE BTC PRICE sections need (see those sections
+       further down): api.coingecko.com (BTC/THB price), *.firebasedatabase.app
+       (Realtime Database, wildcarded so changing FIREBASE_URL to a
+       different project never requires editing this policy), and
+       identitytoolkit/securetoken.googleapis.com (anonymous auth sign-in
+       + token refresh, so the database only answers authenticated
+       requests). Everything else (Chart.js, the Excel exporter, Argon2id)
+       is bundled inline further down, so no other external script/connect
+       host should ever be needed. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com https://api.coingecko.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
 <!-- Chart.js v4.4.1, bundled locally (no CDN) -- MIT license, see https://www.chartjs.org -->
 <script>
 /*!
