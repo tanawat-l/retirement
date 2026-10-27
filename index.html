@@ -1161,6 +1161,14 @@ function totalLiab(){return(DB.assets||[]).filter(a=>a.type==='liability').reduc
 // "disappear" from the Dashboard even when they had real values.
 function latestPortfolioSnapshot(){const s=[...(DB.portfolio||[])].sort((a,b)=>a.date.localeCompare(b.date));return s[s.length-1];}
 function getFireData(){const latest=latestPortfolioSnapshot();return{emg:assetSum('กองทุนฉุกเฉิน')||parseFloat(latest?.emergency)||0,gold:assetSum('ทองคำ')||parseFloat(latest?.gold)||0,rmf:assetSum('RMF / SSF')||parseFloat(latest?.rmf)||0,re:assetSum('กองทุนอสังหาริมทรัพย์')||parseFloat(latest?.realEstate)||0,invVal:investmentsValue()};}
+// Net Worth entries whose category is none of the 5 tracked FIRE buckets
+// above (เงินสด/กระเป๋าเงิน, ยานพาหนะ, อื่นๆ, etc.) were always included in
+// totalAssets()/portfolioTotal() but had no slice in the Dashboard pie --
+// money silently present in the total but invisible in the breakdown.
+// Uses raw assetSum() (not getFireData()'s resolved emg/gold/rmf/re,
+// which can fall back to a Portfolio Log value not actually in DB.assets)
+// so nothing here is double-subtracted.
+function otherAssetsValue(){return totalAssets()-assetSum('กองทุนฉุกเฉิน')-assetSum('ทองคำ')-assetSum('RMF / SSF')-assetSum('กองทุนอสังหาริมทรัพย์')-assetSum('การลงทุน (กำหนดเอง)');}
 function portfolioTotal(){
   if(!DB.assets||DB.assets.length===0){const latest=latestPortfolioSnapshot();if(!latest)return investmentsValue();return investmentsValue()+(parseFloat(latest.emergency)||0)+(parseFloat(latest.gold)||0)+(parseFloat(latest.rmf)||0)+(parseFloat(latest.realEstate)||0);}
   return totalAssets()-totalLiab()+investmentsValue();
@@ -1442,6 +1450,7 @@ function saveFireSettings(){
 }
 function renderDashboard(){
   const{emg,gold,rmf,re,invVal}=getFireData();
+  const other=otherAssetsValue();
   const total=portfolioTotal();
   const fireTarget=getFireTarget();
   const fs=DB.fireSettings||{monthlyExpense:20000,inflationRate:10,currentAge:25,retireAge:65};
@@ -1468,7 +1477,7 @@ function renderDashboard(){
   html+='</div>';
   html+='<div class="grid-2" style="margin-bottom:12px"><div class="card" style="display:flex;flex-direction:column;align-items:center"><div class="card-title" style="align-self:flex-start">สัดส่วนสินทรัพย์</div>'+(total>0&&!hideAmounts?'<canvas id="pie-chart" style="max-width:200px;max-height:200px"></canvas>':'<div style="color:#bbb;font-size:13px;padding:30px;text-align:center">เพิ่มข้อมูลเพื่อดูกราฟ</div>')+'</div>';
   html+='<div class="card"><div class="card-title">รายละเอียดพอร์ต</div>';
-  [['การลงทุน',invVal,'#F7931A'],['กองทุนฉุกเฉิน',emg,'#3b82f6'],['ทองคำ',gold,'#ca8a04'],['RMF / SSF',rmf,'#6b7280'],['กองทุนอสังหาริมทรัพย์',re,'#8b5cf6']].filter(function(r){return r[1]>0;}).forEach(function(r){html+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f4f3ef"><div style="width:10px;height:10px;border-radius:50%;background:'+r[2]+';flex-shrink:0"></div><div style="flex:1;font-size:13px">'+r[0]+'</div><div style="font-weight:700;color:'+r[2]+'">'+fmtFull(r[1])+'</div><div style="font-size:11px;color:#aaa;min-width:36px;text-align:right">'+(hideAmounts?'•••':(total>0?(r[1]/total*100).toFixed(1)+'%':'—'))+'</div></div>';});
+  [['การลงทุน',invVal,'#F7931A'],['กองทุนฉุกเฉิน',emg,'#3b82f6'],['ทองคำ',gold,'#ca8a04'],['RMF / SSF',rmf,'#6b7280'],['กองทุนอสังหาริมทรัพย์',re,'#8b5cf6'],['อื่นๆ / เงินสด',other,'#22c55e']].filter(function(r){return r[1]>0;}).forEach(function(r){html+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f4f3ef"><div style="width:10px;height:10px;border-radius:50%;background:'+r[2]+';flex-shrink:0"></div><div style="flex:1;font-size:13px">'+r[0]+'</div><div style="font-weight:700;color:'+r[2]+'">'+fmtFull(r[1])+'</div><div style="font-size:11px;color:#aaa;min-width:36px;text-align:right">'+(hideAmounts?'•••':(total>0?(r[1]/total*100).toFixed(1)+'%':'—'))+'</div></div>';});
   if(total===0)html+='<div style="color:#bbb;text-align:center;padding:20px;font-size:13px">ยังไม่มีข้อมูล <a href="#" onclick="navigate(\'networth\')" style="color:#F7931A">อัปเดตทรัพย์สินสุทธิ →</a></div>';html+='</div></div>';
   html+='<div class="grid-2"><div class="card"><div class="card-title">เดือนนี้ — '+monthLabel(activeMonth)+'</div>';
   [['รายได้',incTotalM(activeMonth),'#16a34a'],['ใช้จ่าย',spentM(activeMonth),'#dc2626'],['ลงทุน',investM(activeMonth),'#F7931A']].forEach(function(row){html+='<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f4f3ef;font-size:13px"><span style="color:#666">'+row[0]+'</span><span style="font-weight:600;color:'+row[2]+'">'+fmtFull(row[1])+'</span></div>';});
@@ -1487,7 +1496,7 @@ function renderDashboard(){
   html+='</tbody></table></div></div>';
   document.getElementById('content').innerHTML=html;
   const pieCtx=document.getElementById('pie-chart');
-  if(pieCtx&&total>0&&!hideAmounts){const labels=[],data=[],colors=[];if(invVal>0){labels.push('Investments');data.push(Math.round(invVal));colors.push('#F7931A');}if(emg>0){labels.push('Emergency');data.push(emg);colors.push('#3b82f6');}if(gold>0){labels.push('ทองคำ');data.push(gold);colors.push('#ca8a04');}if(rmf>0){labels.push('RMF');data.push(rmf);colors.push('#6b7280');}if(re>0){labels.push('Real Estate');data.push(re);colors.push('#8b5cf6');}try{activeChart=new Chart(pieCtx,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:2}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:8}}}}});}catch(e){console.warn('Chart error:',e);}}
+  if(pieCtx&&total>0&&!hideAmounts){const labels=[],data=[],colors=[];if(invVal>0){labels.push('Investments');data.push(Math.round(invVal));colors.push('#F7931A');}if(emg>0){labels.push('Emergency');data.push(emg);colors.push('#3b82f6');}if(gold>0){labels.push('ทองคำ');data.push(gold);colors.push('#ca8a04');}if(rmf>0){labels.push('RMF');data.push(rmf);colors.push('#6b7280');}if(re>0){labels.push('Real Estate');data.push(re);colors.push('#8b5cf6');}if(other>0){labels.push('Other / Cash');data.push(Math.round(other));colors.push('#22c55e');}try{activeChart=new Chart(pieCtx,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:2}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:8}}}}});}catch(e){console.warn('Chart error:',e);}}
   const growthCtx=document.getElementById('growth-chart');
   if(growthCtx&&snaps.length>1&&!hideAmounts){const labels=snaps.map(s=>s.date),totals=snaps.map(s=>(parseFloat(s.emergency)||0)+(parseFloat(s.investments)||0)+(parseFloat(s.gold)||0)+(parseFloat(s.rmf)||0)+(parseFloat(s.realEstate)||0));try{activeChart2=new Chart(growthCtx,{type:'line',data:{labels,datasets:[{label:'Portfolio',data:totals,borderColor:'#F7931A',backgroundColor:'rgba(247,147,26,.1)',fill:true,tension:0.3,pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return fmt(v);}}}}}});}catch(e){console.warn('Chart2 error:',e);}}
 }
