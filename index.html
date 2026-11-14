@@ -1519,7 +1519,7 @@ async function cloudPull(force){
     if(!stored||typeof stored!=='string'){updateSyncBadge('ok','No cloud data yet.');return false;}
     let safe;
     try{const plain=await decryptWithKey(dbKey,stored);safe=_sanitizeDB(JSON.parse(plain));}
-    catch(e){updateSyncBadge('err','Could not decrypt cloud data (wrong password on that copy?)');return false;}
+    catch(e){updateSyncBadge('err','Could not decrypt cloud data - this device has a different key. Use Re-link below.');return false;}
     const hasRemote=safe.transactions.length>0||(safe.customInvestments&&safe.customInvestments.length>0)||safe.assets.length>0||safe.portfolio.length>0;
     const hasLocal=DB.transactions.length>0||(DB.customInvestments&&DB.customInvestments.length>0)||(DB.assets&&DB.assets.length>0)||DB.portfolio.length>0;
     if(!force&&!hasRemote){updateSyncBadge('ok','Cloud empty — local kept.');return false;}
@@ -1554,7 +1554,7 @@ async function cloudPush(encryptedBlob,force){
         const stored=await g.json();
         if(stored&&typeof stored==='string'){
           try{await decryptWithKey(dbKey,stored);}
-          catch(e){updateSyncBadge('err','Push blocked: cloud holds data encrypted with a different key, so this device\'s account does not match. Fix: on the device with your real data, tap ☁ → Push.');return false;}
+          catch(e){updateSyncBadge('err','Push blocked: cloud data uses a different key. Push from your main device, then use Re-link here.');return false;}
         }
       }
       _cloudVerified=true;
@@ -1565,6 +1565,52 @@ async function cloudPush(encryptedBlob,force){
   }catch(e){updateSyncBadge('err',e.message==='Timeout'?'Push timed out':'Push: '+e.message);return false;}
 }
 function showSyncModal(){navigate('profile');}
+// Re-link: switch THIS device to the cloud account's encryption key.
+// Needed when a second device first created its own account (different random
+// salts = different key), so it can't read data pushed from the main device.
+function closeRelinkModal(){const m=document.getElementById('relink-modal');if(m)m.remove();}
+function showRelinkModal(){
+  closeRelinkModal();
+  const st='width:100%;border:1.5px solid #e6e3dc;border-radius:12px;padding:10px 12px;font-size:15px;outline:none;margin-bottom:10px;box-sizing:border-box';
+  document.body.insertAdjacentHTML('beforeend','<div id="relink-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px"><div style="background:#fff;border-radius:14px;padding:24px 26px;width:380px;max-width:100%"><div style="font-size:16px;font-weight:700;margin-bottom:6px">Re-link this device</div><div style="font-size:12px;color:#85827a;margin-bottom:14px">Replaces the data on this device with the cloud copy. Push from your main device first.</div><input type="password" id="relink-pass" placeholder="Account password" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doRelink()" style="'+st+'"><div id="relink-err" style="font-size:12px;color:#dc2626;min-height:16px;margin-bottom:8px"></div><div style="display:flex;gap:8px"><button class="btn btn-ghost" style="flex:1" onclick="closeRelinkModal()">Cancel</button><button id="relink-ok" class="btn btn-primary" style="flex:1" onclick="doRelink()">Re-link</button></div></div></div>');
+  setTimeout(function(){const i=document.getElementById('relink-pass');if(i)i.focus();},50);
+}
+async function doRelink(){
+  const err=document.getElementById('relink-err'),btn=document.getElementById('relink-ok');
+  const fail=function(msg){err.textContent=msg;btn.disabled=false;btn.textContent='Re-link';};
+  const pass=document.getElementById('relink-pass').value;
+  err.textContent='';
+  if(!pass)return fail('Enter your password.');
+  btn.disabled=true;btn.textContent='…';
+  try{
+    const token=await ensureAnonAuth();
+    const url=function(path){const u=FIREBASE_URL.replace(/\/+$/,'')+path+currentUHash+'.json';return token?u+'?auth='+encodeURIComponent(token):u;};
+    const ar=await _fetchTimeout(url('/acct/'),{},8000);
+    const rec=ar.ok?await ar.json():null;
+    if(!rec||!rec.authHash||!rec.authSalt||!rec.encSalt)return fail('No account record in the cloud. On your main device: Profile › Cloud sync › Push.');
+    if((await argonHashHex(pass,rec.authSalt))!==rec.authHash)return fail('Wrong password.');
+    const key=await deriveEncKey(pass,rec.encSalt);
+    const dr=await _fetchTimeout(url('/u/'),{},8000);
+    const stored=dr.ok?await dr.json():null;
+    if(!stored||typeof stored!=='string')return fail('No data in the cloud yet. Push from your main device first.');
+    let plain;
+    try{plain=await decryptWithKey(key,stored);}
+    catch(e){return fail('Cloud data does not match the cloud account. Push again from your main device.');}
+    const safe=_sanitizeDB(JSON.parse(plain));
+    const accts=getAccounts(),a=accts[currentUHash]||{};
+    a.authHash=rec.authHash;a.authSalt=rec.authSalt;a.encSalt=rec.encSalt;
+    if(rec.displayName)a.displayName=rec.displayName;
+    accts[currentUHash]=a;saveAccounts(accts);
+    dbKey=key;DB=safe;
+    localStorage.setItem(SK,stored);
+    localStorage.removeItem(SK+'_bak'); // old backup was encrypted with the previous key
+    sessionStorage.setItem('fm_key',await exportKeyRaw(dbKey));
+    closeRelinkModal();
+    updateSyncBadge('ok','Re-linked '+new Date().toLocaleTimeString());
+    toast('Device re-linked','ok');
+    navigate('profile');
+  }catch(e){fail('Failed: '+e.message);}
+}
 function afterSync(){if(currentPage==='profile')renderProfile();}
 async function doSyncTest(){
   _lastPushAt=0;toast('Testing cloud sync…','ok');
@@ -1661,7 +1707,7 @@ function renderProfile(){
     +row('Import backup (JSON)',btn('Choose file','importData()'))
     +row('Automatic backup',btn('Restore','restoreFromBackup()'))
     +'</div>';
-  h+='<div class="card"><div class="card-title">Cloud sync</div><div id="sync-status">'+syncPillHtml()+'</div><div class="btn-row" style="margin-top:14px">'+btn('Test','doSyncTest()')+btn('Pull','doSyncPull()')+btn('Push','doSyncPush()')+'</div><div class="muted-sm" style="margin-top:8px">Pull overwrites this device. Push overwrites the cloud.</div></div>';
+  h+='<div class="card"><div class="card-title">Cloud sync</div><div id="sync-status">'+syncPillHtml()+'</div><div class="btn-row" style="margin-top:14px">'+btn('Test','doSyncTest()')+btn('Pull','doSyncPull()')+btn('Push','doSyncPush()')+btn('Re-link','showRelinkModal()')+'</div><div class="muted-sm" style="margin-top:8px">Pull overwrites this device. Push overwrites the cloud. Re-link switches this device to the cloud copy (needs your password).</div></div>';
   h+='<div class="card"><div class="card-title">Security</div>'
     +row('PIN',hasPin?btn('Change',"showPinModal('change',renderProfile)")+btn('Remove',"showPinModal('remove',renderProfile)"):btn('Set PIN',"showPinModal('set',renderProfile)"))
     +(webauthnSupported()?row('Biometric unlock',hasBio?btn('Turn off','disableBiometric();renderProfile()'):btn('Enable',"Promise.resolve(enableBiometric()).then(function(){if(currentPage==='profile')renderProfile();})")):'')
