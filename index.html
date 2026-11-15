@@ -445,6 +445,11 @@ th,td{padding:10px;}
     <input type="password" id="pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="&bull;&bull;&bull;&bull;" onkeydown="if(event.key==='Enter')submitPin()" style="width:100%;background:#252422;border:1px solid #333;border-radius:7px;padding:10px 12px;font-size:20px;letter-spacing:.35em;text-align:center;color:#f0efe8;outline:none;margin-bottom:10px;box-sizing:border-box">
     <button id="pin-btn" onclick="submitPin()" style="width:100%;padding:11px;background:#F7931A;color:#0f0f0d;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px">Continue</button>
     <div id="pin-err" style="font-size:12px;color:#ef4444;min-height:16px"></div>
+    <button id="pin-forgot-link" onclick="showForgotPin()" style="background:none;border:none;font-size:12px;color:#F7931A;cursor:pointer;margin-top:6px">Forgot PIN?</button>
+    <div id="pin-forgot" style="display:none;margin-top:8px">
+      <input type="password" id="pin-forgot-pass" placeholder="Account password" autocomplete="current-password" onkeydown="if(event.key==='Enter')resetPinWithPassword()" style="width:100%;background:#252422;border:1px solid #333;border-radius:7px;padding:10px 12px;font-size:14px;text-align:center;color:#f0efe8;outline:none;margin-bottom:8px;box-sizing:border-box">
+      <button onclick="resetPinWithPassword()" style="width:100%;padding:10px;background:#2a2a27;color:#f0efe8;border:1px solid #333;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Remove PIN</button>
+    </div>
     <button onclick="document.getElementById('pin-screen').style.display='none';doLogout()" style="background:none;border:none;font-size:11px;color:#555;cursor:pointer;margin-top:8px">Sign out instead</button>
   </div>
 </div>
@@ -810,7 +815,7 @@ async function doLogin(){
     document.getElementById('login-screen').style.display='none';
     document.getElementById('user-name-display').textContent=currentUsername;
     resetInactivityTimer();
-    sessionStorage.removeItem('fm_pin_ok');
+    sessionStorage.removeItem('fm_pin_ok');sessionStorage.removeItem('fm_pin_try');
     const proceed=function(){
       if(!DB.disclaimerAccepted){showDisclaimer(isNewAccount);return;}
       enterAppAfterLogin(isNewAccount);
@@ -833,7 +838,7 @@ function enterAppAfterLogin(isNewAccount){
 function doLogout(){
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
   clearInactivityTimer();
-  sessionStorage.removeItem('fm_sess');sessionStorage.removeItem('fm_key');sessionStorage.removeItem('fm_pin_ok');
+  sessionStorage.removeItem('fm_sess');sessionStorage.removeItem('fm_key');sessionStorage.removeItem('fm_pin_ok');sessionStorage.removeItem('fm_pin_try');
   currentDataKey=null;currentUsername='';currentUHash='';dbKey=null;
   DB=_emptyDB();SK='fm_v3';
   document.getElementById('app').style.display='none';
@@ -958,15 +963,31 @@ function disableBiometric(){
 // 4-6 digit PIN has too few combinations to protect data on its own if
 // someone copied this browser's storage. 3 wrong PINs = signed out.
 // ─────────────────────────────────────────────────────
-function accountHasPin(){const a=getAccounts()[currentUHash];return!!(a&&a.pinHash&&a.pinSalt);}
+// The PIN hash lives inside the ENCRYPTED data (DB.pin), so it syncs with the cloud copy and is the
+// same on every device. Older builds kept it per device in the local account record: that copy is
+// still honoured once and moved into DB.pin the next time it is used.
+function pinRecord(){
+  if(DB&&DB.pin&&DB.pin.hash&&DB.pin.salt)return{salt:DB.pin.salt,hash:DB.pin.hash,legacy:false};
+  const a=getAccounts()[currentUHash];
+  if(a&&a.pinHash&&a.pinSalt)return{salt:a.pinSalt,hash:a.pinHash,legacy:true};
+  return null;
+}
+function accountHasPin(){return!!pinRecord();}
+function dropLegacyPin(){const accts=getAccounts();if(accts[currentUHash]){delete accts[currentUHash].pinSalt;delete accts[currentUHash].pinHash;saveAccounts(accts);}}
+function storePin(salt,hash){DB.pin={salt:salt,hash:hash};dropLegacyPin();save();}
+function clearPin(){delete DB.pin;dropLegacyPin();save();}
 function pinValid(p){return /^\d{4,6}$/.test(p||'');}
 function pinTooWeak(p){return /^(\d)\1+$/.test(p)||'0123456789'.indexOf(p)>-1||'9876543210'.indexOf(p)>-1;}
-let _pinAttempts=0,_pinContinue=null;
+let _pinContinue=null;
+// Wrong-attempt count is kept in sessionStorage so refreshing the page cannot reset it.
+function pinTries(){return parseInt(sessionStorage.getItem('fm_pin_try')||'0',10)||0;}
 function showPinGate(onSuccess){
-  _pinContinue=onSuccess||null;_pinAttempts=0;
+  _pinContinue=onSuccess||null;
   document.getElementById('pin-user').textContent=currentUsername||'';
   document.getElementById('pin-input').value='';
   document.getElementById('pin-err').textContent='';
+  document.getElementById('pin-forgot').style.display='none';
+  document.getElementById('pin-forgot-link').style.display='inline-block';
   document.getElementById('pin-screen').style.display='flex';
   setTimeout(function(){const i=document.getElementById('pin-input');if(i)i.focus();},50);
 }
@@ -974,27 +995,51 @@ async function submitPin(){
   const pin=document.getElementById('pin-input').value;
   const errEl=document.getElementById('pin-err'),btn=document.getElementById('pin-btn');
   if(!pinValid(pin)){errEl.textContent='Enter your 4–6 digit PIN.';return;}
-  const acct=getAccounts()[currentUHash];
-  if(!acct||!acct.pinHash){passPin();return;}
+  const rec=pinRecord();
+  if(!rec){passPin();return;}
   btn.disabled=true;btn.textContent='…';
   try{
-    const h=await argonHashHex(pin,acct.pinSalt);
-    if(h===acct.pinHash){btn.disabled=false;btn.textContent='Continue';passPin();return;}
-    _pinAttempts++;
+    const h=await argonHashHex(pin,rec.salt);
+    if(h===rec.hash){
+      btn.disabled=false;btn.textContent='Continue';
+      if(rec.legacy)storePin(rec.salt,rec.hash);
+      passPin();return;
+    }
+    const n=pinTries()+1;sessionStorage.setItem('fm_pin_try',String(n));
     document.getElementById('pin-input').value='';
-    if(_pinAttempts>=3){
+    if(n>=3){
       errEl.textContent='Too many wrong PINs — signing out.';
       setTimeout(function(){document.getElementById('pin-screen').style.display='none';doLogout();},900);
       return;
     }
-    errEl.textContent='Wrong PIN. '+(3-_pinAttempts)+' attempt(s) left.';
+    errEl.textContent='Wrong PIN. '+(3-n)+' attempt(s) left.';
   }catch(e){errEl.textContent='Error — try again.';}
   btn.disabled=false;btn.textContent='Continue';
 }
 function passPin(){
-  sessionStorage.setItem('fm_pin_ok','1');
+  sessionStorage.setItem('fm_pin_ok','1');sessionStorage.removeItem('fm_pin_try');
   document.getElementById('pin-screen').style.display='none';
   const cb=_pinContinue;_pinContinue=null;if(cb)cb();
+}
+function showForgotPin(){
+  document.getElementById('pin-forgot').style.display='block';
+  document.getElementById('pin-forgot-link').style.display='none';
+  const i=document.getElementById('pin-forgot-pass');if(i)i.focus();
+}
+// Forgot PIN: your account password proves it is you; the PIN is removed so you can set a new one.
+async function resetPinWithPassword(){
+  const errEl=document.getElementById('pin-err');
+  const pass=document.getElementById('pin-forgot-pass').value;
+  const acct=getAccounts()[currentUHash];
+  if(!pass||!acct){errEl.textContent='Enter your account password.';return;}
+  errEl.textContent='';
+  try{
+    if((await argonHashHex(pass,acct.authSalt))!==acct.authHash){errEl.textContent='Wrong password.';return;}
+    document.getElementById('pin-forgot-pass').value='';
+    clearPin();
+    toast('PIN removed — set a new one in Profile','ok');
+    passPin();
+  }catch(e){errEl.textContent='Error — try again.';}
 }
 function closePinModal(){const m=document.getElementById('pin-modal');if(m)m.remove();}
 function showPinModal(mode,onDone){
@@ -1021,24 +1066,19 @@ async function submitPinModal(mode){
   const err=document.getElementById('pin-modal-err'),btn=document.getElementById('pin-modal-ok');
   err.textContent='';
   const val=function(id){const e=document.getElementById(id);return e?e.value:'';};
-  const accts=getAccounts(),acct=accts[currentUHash];
-  if(!acct){err.textContent='Session error — please sign in again.';return;}
   btn.disabled=true;
   try{
     if(mode==='change'||mode==='remove'){
-      const cur=val('pin-cur');
-      if(!pinValid(cur)||(await argonHashHex(cur,acct.pinSalt))!==acct.pinHash){err.textContent='Current PIN is wrong.';btn.disabled=false;return;}
+      const cur=val('pin-cur'),rec=pinRecord();
+      if(!rec||!pinValid(cur)||(await argonHashHex(cur,rec.salt))!==rec.hash){err.textContent='Current PIN is wrong.';btn.disabled=false;return;}
     }
-    if(mode==='remove'){
-      delete acct.pinSalt;delete acct.pinHash;saveAccounts(accts);
-      toast('PIN removed','ok');finishPinModal();return;
-    }
+    if(mode==='remove'){clearPin();toast('PIN removed','ok');finishPinModal();return;}
     const p1=val('pin-new1'),p2=val('pin-new2');
     if(!pinValid(p1)){err.textContent='PIN must be 4–6 digits (numbers only).';btn.disabled=false;return;}
     if(p1!==p2){err.textContent="PINs don't match.";btn.disabled=false;return;}
     if(pinTooWeak(p1)){err.textContent='Too easy to guess — avoid repeated or sequential digits.';btn.disabled=false;return;}
     const salt=randSaltB64();
-    acct.pinSalt=salt;acct.pinHash=await argonHashHex(p1,salt);saveAccounts(accts);
+    storePin(salt,await argonHashHex(p1,salt));
     sessionStorage.setItem('fm_pin_ok','1');
     toast('PIN saved','ok');finishPinModal();
   }catch(e){err.textContent='Error — try again.';btn.disabled=false;}
@@ -2586,7 +2626,7 @@ async function confirmDeleteAccount(){
     Object.keys(accts).forEach(uHash=>{if(accts[uHash].dataKey===dataKeyToRemove)delete accts[uHash];});
     saveAccounts(accts);
     if(dataKeyToRemove){localStorage.removeItem(dataKeyToRemove);localStorage.removeItem(dataKeyToRemove+'_bak');}
-    sessionStorage.removeItem('fm_sess');sessionStorage.removeItem('fm_key');sessionStorage.removeItem('fm_pin_ok');
+    sessionStorage.removeItem('fm_sess');sessionStorage.removeItem('fm_key');sessionStorage.removeItem('fm_pin_ok');sessionStorage.removeItem('fm_pin_try');
     if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
     clearInactivityTimer();appIsLocked=false;
     const lEl=document.getElementById('lock-screen');if(lEl)lEl.style.display='none';
@@ -2636,19 +2676,20 @@ function startApp(){
     DB=await initDB();
     document.getElementById('user-name-display').textContent=currentUsername;
     resetInactivityTimer();
+    const finishRestore=function(){
+      if(!DB.disclaimerAccepted){document.getElementById('login-screen').style.display='none';showDisclaimer(false);return;}
+      const hasData2=DB.transactions.length>0||(DB.customInvestments&&DB.customInvestments.length>0)||(DB.assets&&DB.assets.length>0)||DB.portfolio.length>0;
+      if(!DB.fireSettings||!DB.fireSettings.setupDone){
+        if(!hasData2){document.getElementById('login-screen').style.display='none';showSetup();}
+        else{if(!DB.fireSettings)DB.fireSettings={monthlyExpense:20000,inflationRate:10,currentAge:25,retireAge:65,setupDone:true};else DB.fireSettings.setupDone=true;save();document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';startApp();}
+      }
+      else{document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';startApp();}
+    };
     // Page refresh inside a session skips the password, so it must not skip the PIN either.
     if(accountHasPin()&&sessionStorage.getItem('fm_pin_ok')!=='1'){
       document.getElementById('login-screen').style.display='none';
-      showPinGate(function(){location.reload();});
-      return;
-    }
-    if(!DB.disclaimerAccepted){document.getElementById('login-screen').style.display='none';showDisclaimer(false);return;}
-    const hasData2=DB.transactions.length>0||(DB.customInvestments&&DB.customInvestments.length>0)||(DB.assets&&DB.assets.length>0)||DB.portfolio.length>0;
-    if(!DB.fireSettings||!DB.fireSettings.setupDone){
-      if(!hasData2){document.getElementById('login-screen').style.display='none';showSetup();}
-      else{if(!DB.fireSettings)DB.fireSettings={monthlyExpense:20000,inflationRate:10,currentAge:25,retireAge:65,setupDone:true};else DB.fireSettings.setupDone=true;save();document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';startApp();}
-    }
-    else{document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';startApp();}
+      showPinGate(finishRestore);
+    }else finishRestore();
   }catch(e){console.warn('Session restore failed, falling back to login screen:',e);}
 })();
 </script>
